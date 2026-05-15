@@ -12,6 +12,7 @@ namespace UnPSARC
 
         public static void Unpack(Stream ArchiveRaw, string Folder)
         {
+            Directory.CreateDirectory(Folder);
             Stream Reader = ArchiveRaw;
             PSARC Psarc = new PSARC(Reader);
             Psarc.Read();
@@ -21,26 +22,9 @@ namespace UnPSARC
             for (int i = 0; i < Psarc.FilesCount; i++)
             {
                 TEntry ThisEntry = Psarc.Entries[i];
-
-                string filenameHash = BitConverter.ToString(ThisEntry.HashNames);
-
-                if (ThisEntry.Offset == 0 || filenameHash == FNameFileHash)
+                if (ShouldSkipEntry(ThisEntry))
                     continue;
-
-                string FileName;
-                if (!Psarc.FileNames.ContainsKey(filenameHash))
-                {
-                    Console.WriteLine("Archive Contains a hash which is not in filenames table: " + filenameHash);
-                    FileName = "_Unknowns" + Path.DirectorySeparatorChar.ToString() + filenameHash.Replace("-", "") + ".bin";
-                }
-                else
-                {
-                    FileName = Psarc.FileNames[filenameHash].Replace("/", Path.DirectorySeparatorChar.ToString());
-                }
-
-
-                if (FileName.StartsWith(Path.DirectorySeparatorChar.ToString()))
-                    FileName = FileName.Remove(0, 1);
+                string FileName = GetOutputFileName(Psarc, ThisEntry);
 
                 try
                 {
@@ -72,7 +56,48 @@ namespace UnPSARC
 
             }
 
+            PSARCRepackMetadata.Write(Folder, GetArchiveName(ArchiveRaw), Psarc);
             Console.WriteLine($"Unpacking done! | {Psarc.FilesCount - FailedFiles} of {Psarc.FilesCount} Files Exported");
+        }
+
+        internal static bool ShouldSkipEntry(TEntry entry)
+        {
+            string filenameHash = BitConverter.ToString(entry.HashNames);
+            return entry.Offset == 0 || filenameHash == FNameFileHash;
+        }
+
+        internal static string GetArchiveFileName(PSARC psarc, TEntry entry)
+        {
+            string filenameHash = BitConverter.ToString(entry.HashNames);
+            if (!psarc.FileNames.ContainsKey(filenameHash))
+            {
+                Console.WriteLine("Archive Contains a hash which is not in filenames table: " + filenameHash);
+                return "_Unknowns/" + filenameHash.Replace("-", "") + ".bin";
+            }
+
+            return psarc.FileNames[filenameHash];
+        }
+
+        private static string GetOutputFileName(PSARC psarc, TEntry entry)
+        {
+            string fileName = GetArchiveFileName(psarc, entry).Replace("/", Path.DirectorySeparatorChar.ToString());
+            if (fileName.StartsWith(Path.DirectorySeparatorChar.ToString()))
+            {
+                fileName = fileName.Remove(0, 1);
+            }
+
+            return fileName;
+        }
+
+        private static string GetArchiveName(Stream archiveRaw)
+        {
+            FileStream fileStream = archiveRaw as FileStream;
+            if (fileStream == null)
+            {
+                return "archive.psarc";
+            }
+
+            return Path.GetFileName(fileStream.Name);
         }
 
         public static void TryUnpack(Stream Reader, out HugeMemoryStream Writer, TEntry ThisEntry, TZSize[] ZSizes, int BlockSize, string CompressionType)
@@ -84,7 +109,9 @@ namespace UnPSARC
 
             while (MEMORY_FILE.Length < ThisEntry.UncompressedSize)
             {
-                int CompressedSize = ZSizes[ZSizeIndex++].ZSize;
+                int RawZSize = ZSizes[ZSizeIndex++].ZSize;
+                bool IsRawBlock = RawZSize == 0;
+                int CompressedSize = RawZSize;
 
                 if (CompressedSize == 0)
                     CompressedSize = BlockSize;
@@ -92,9 +119,9 @@ namespace UnPSARC
                 if (CompressedSize == ThisEntry.UncompressedSize)
                     MEMORY_FILE.WriteBytes(Reader.ReadAtOffset(BlockOffset, ThisEntry.UncompressedSize));
                 else if (RemainingSize < BlockSize || CompressedSize == BlockSize)
-                    MEMORY_FILE.WriteBytes(Reader.ReadAtOffset(BlockOffset, RemainingSize, CompressedSize, CompressionType));
+                    MEMORY_FILE.WriteBytes(Reader.ReadAtOffset(BlockOffset, RemainingSize, CompressedSize, CompressionType, IsRawBlock));
                 else
-                    MEMORY_FILE.WriteBytes(Reader.ReadAtOffset(BlockOffset, BlockSize, CompressedSize, CompressionType));
+                    MEMORY_FILE.WriteBytes(Reader.ReadAtOffset(BlockOffset, BlockSize, CompressedSize, CompressionType, IsRawBlock));
 
                 BlockOffset += (uint)CompressedSize;
                 RemainingSize -= BlockSize;

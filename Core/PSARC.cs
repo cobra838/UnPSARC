@@ -10,20 +10,22 @@ namespace UnPSARC
     internal class PSARC
     {
         private string ArchiveMagic;
-        private ushort MajorVersion;
-        private ushort MinorVersion;
+        public ushort MajorVersion;
+        public ushort MinorVersion;
         public string CompressionType;
         public int StartOFDatas;
         public int SizeOfEntry;
         public int FilesCount;
         public int ZSizeCount;
         public int BlockSize;
-        private int Zero;
+        public int ArchiveFlags;
         public TEntry[] Entries;
         public TZSize[] ZSizes;
         public Dictionary<string, string> FileNames;
         public Stream Reader;
         public Stream Writer;
+        public bool HasIgnoreCasePaths => (ArchiveFlags & 0x1) != 0;
+        public bool HasAbsolutePaths => (ArchiveFlags & 0x2) != 0;
         public PSARC(Stream Reader)
         {
             this.Reader = Reader;
@@ -64,7 +66,7 @@ namespace UnPSARC
             FilesCount = Reader.ReadValueS32(Endian.Big);
             ZSizeCount = (StartOFDatas - (SizeOfEntry * FilesCount) + 32) / 2;
             BlockSize = Reader.ReadValueS32(Endian.Big);
-            Zero = Reader.ReadValueS32(Endian.Big);
+            ArchiveFlags = Reader.ReadValueS32(Endian.Big);
             Entries = new TEntry[FilesCount];
             for (int index = 0; index < FilesCount; ++index)
             {
@@ -95,11 +97,11 @@ namespace UnPSARC
                 }
                 if (!ret.ContainsKey(IOHelper.GetMD5String(Name.ToUpper())))
                 {
-                    ret.Add(BitConverter.ToString(IOHelper.GetMD5(Name.ToUpper())), Name.ToUpper());  // Issue #20
+                    ret.Add(BitConverter.ToString(IOHelper.GetMD5(Name.ToUpper())), Name);  // Issue #20: uppercase hash, original path
                 }
                 if (!ret.ContainsKey(IOHelper.GetMD5String(Name.ToLower())))
                 {
-                    ret.Add(BitConverter.ToString(IOHelper.GetMD5(Name.ToLower())), Name.ToLower());  // Mostly not needed
+                    ret.Add(BitConverter.ToString(IOHelper.GetMD5(Name.ToLower())), Name);  // Keep original path casing
                 }
             }
             return ret;

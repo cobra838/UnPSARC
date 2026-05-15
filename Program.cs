@@ -108,19 +108,87 @@ namespace UnPSARC
 
         private static void PackArchiveFile(string contentFolderPath, string outputFilename)
         {
+            string fileListPath = Path.Combine(contentFolderPath, "Filenames.txt");
+            string packerPath = Path.Combine(contentFolderPath, "r.exe");
 
-            File.WriteAllText(Path.Combine(contentFolderPath, "Filenames.txt"), MakeFileNameTable(contentFolderPath));
-            File.WriteAllBytes(Path.Combine(contentFolderPath, "r.exe"), Packer.psarc);
+            try
+            {
+                string packXmlPath = PSARCRepackMetadata.CreatePackXml(contentFolderPath, outputFilename);
+                if (packXmlPath != null)
+                {
+                    try
+                    {
+                        File.WriteAllBytes(packerPath, Packer.psarc);
+                        Console.WriteLine($"Packing with metadata {PSARCRepackMetadata.FileName}");
+                        RunPacker(contentFolderPath, packerPath, $"--xml=\"{packXmlPath}\"");
+                        return;
+                    }
+                    finally
+                    {
+                        if (File.Exists(packXmlPath))
+                        {
+                            File.Delete(packXmlPath);
+                        }
+                    }
+                }
+
+                File.WriteAllText(fileListPath, MakeFileNameTable(contentFolderPath));
+                File.WriteAllBytes(packerPath, Packer.psarc);
+                RunPacker(contentFolderPath, packerPath, $"create --skip-missing-files --inputfile=filenames.txt --output=\"{outputFilename}\" -y");
+            }
+            finally
+            {
+                if (File.Exists(packerPath))
+                {
+                    File.Delete(packerPath);
+                }
+
+                if (File.Exists(fileListPath))
+                {
+                    File.Delete(fileListPath);
+                }
+            }
+        }
+
+        private static string MakeFileNameTable(string contentFolderPath)
+        {
+            List<string> files = new List<string>();
+            foreach (string fname in Directory.GetFiles(contentFolderPath, "*.*", SearchOption.AllDirectories))
+            {
+                if (ShouldSkipPackHelperFile(contentFolderPath, fname))
+                    continue;
+                string _ = fname.Replace(contentFolderPath + Path.DirectorySeparatorChar.ToString(), "").Replace(Path.DirectorySeparatorChar.ToString(), "/");
+                files.Add(_);
+            }
+            return string.Join("\n", files);
+        }
+
+        private static bool ShouldSkipPackHelperFile(string contentFolderPath, string filePath)
+        {
+            string fileName = Path.GetFileName(filePath);
+            if (fileName == "Filenames.txt" || fileName == PSARCRepackMetadata.FileName)
+            {
+                return true;
+            }
+
+            string fullOutputPath = Path.GetFullPath(filePath);
+            string fullMetadataPath = Path.GetFullPath(PSARCRepackMetadata.GetPath(contentFolderPath));
+            return string.Equals(fullOutputPath, fullMetadataPath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void RunPacker(string workingDirectory, string executablePath, string arguments)
+        {
             ProcessStartInfo psi = new ProcessStartInfo
             {
-                FileName = Path.Combine(contentFolderPath, "r.exe"),
-                Arguments = $"create -a --skip-missing-files --inputfile=filenames.txt --output=\"{outputFilename}\" -N -y",
+                FileName = executablePath,
+                Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                WorkingDirectory = contentFolderPath,
+                WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
+
             using (var process = new Process { StartInfo = psi })
             {
                 process.OutputDataReceived += (sender, e) =>
@@ -142,23 +210,12 @@ namespace UnPSARC
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 process.WaitForExit();
-                File.Delete(Path.Combine(contentFolderPath, "r.exe"));
-                File.Delete(Path.Combine(contentFolderPath, "Filenames.txt"));
-            }
 
-        }
-
-        private static string MakeFileNameTable(string contentFolderPath)
-        {
-            List<string> files = new List<string>();
-            foreach (string fname in Directory.GetFiles(contentFolderPath, "*.*", SearchOption.AllDirectories))
-            {
-                if (Path.GetFileName(fname) == "Filenames.txt")
-                    continue;
-                string _ = fname.Replace(contentFolderPath + Path.DirectorySeparatorChar.ToString(), "").Replace(Path.DirectorySeparatorChar.ToString(), "/");
-                files.Add(_);
+                if (process.ExitCode != 0)
+                {
+                    throw new InvalidOperationException($"psarc.exe exited with code {process.ExitCode}.");
+                }
             }
-            return string.Join("\n", files);
         }
 
         private static void UnpackArchiveFile(string inputPath, string outputDirectory)

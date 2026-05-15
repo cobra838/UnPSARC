@@ -10,20 +10,11 @@ namespace UnPSARC
         {
             var compressedStream = new MemoryStream(Data);
             var decompressedStream = new HugeMemoryStream();
-            try
+            using (var zlibStream = new InflaterInputStream(compressedStream))
             {
-                using (var zlibStream = new InflaterInputStream(compressedStream))
-                {
-                    zlibStream.CopyTo(decompressedStream);
-                }
-                decompressedStream.Position = 0;
-
+                zlibStream.CopyTo(decompressedStream);
             }
-            catch
-            {
-                return new byte[decompressedSize];
-            }
-                
+            decompressedStream.Position = 0;
             return decompressedStream.ToByteArray();
         }
     }

@@ -16,7 +16,7 @@ namespace UnPSARC
             s.Seek(pos, SeekOrigin.Begin);
             return log;
         }
-        public static byte[] ReadAtOffset(this Stream s, long Offset, long size, int ZSize, string CompressionType)
+        public static byte[] ReadAtOffset(this Stream s, long Offset, long size, int ZSize, string CompressionType, bool IsRawBlock)
         {
 
             long pos = s.Position;
@@ -24,10 +24,23 @@ namespace UnPSARC
             int magic = s.ReadValueU16();
             s.Seek(Offset, SeekOrigin.Begin);
             byte[] Block = s.ReadBytes(ZSize);
-            byte[] log = { };
-            if (CompressionType == "oodl" && magic == 0x68C) log = Oodle.Decompress(Block, (int)size, Oodle.OodleLZ_FuzzSafe.No, Oodle.OodleLZ_CheckCRC.No, Oodle.OodleLZ_Verbosity.None, Oodle.OodleLZ_Decode_ThreadPhase.Unthreaded);
-            if (CompressionType == "zlib" && magic == 0xDA78) log = Zlib.Decompress(Block, (int)size);
-            if (log.Length == 0) log = Block;
+            byte[] log;
+            if (IsRawBlock)
+            {
+                log = Block;
+            }
+            else if (CompressionType == "oodl" && magic == 0x68C)
+            {
+                log = Oodle.Decompress(Block, (int)size, Oodle.OodleLZ_FuzzSafe.No, Oodle.OodleLZ_CheckCRC.No, Oodle.OodleLZ_Verbosity.None, Oodle.OodleLZ_Decode_ThreadPhase.Unthreaded);
+            }
+            else if (CompressionType == "zlib" && magic == 0xDA78)
+            {
+                log = Zlib.Decompress(Block, (int)size);
+            }
+            else
+            {
+                log = Block;
+            }
             s.Seek(pos, SeekOrigin.Begin);
             return log;
         }

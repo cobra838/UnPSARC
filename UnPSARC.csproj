@@ -163,6 +163,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Compression\Zlib.cs" />
     <Compile Include="Core\PSARC.cs" />
+    <Compile Include="Core\PSARCRepackMetadata.cs" />
     <Compile Include="Core\TEntry.cs" />
     <Compile Include="Core\TZSize.cs" />
   </ItemGroup>
