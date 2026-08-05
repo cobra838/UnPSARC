@@ -64,7 +64,7 @@ namespace UnPSARC
             StartOFDatas = Reader.ReadValueS32(Endian.Big);
             SizeOfEntry = Reader.ReadValueS32(Endian.Big);
             FilesCount = Reader.ReadValueS32(Endian.Big);
-            ZSizeCount = (StartOFDatas - (SizeOfEntry * FilesCount) + 32) / 2;
+            ZSizeCount = (StartOFDatas - (SizeOfEntry * FilesCount) - 32) / 2;
             BlockSize = Reader.ReadValueS32(Endian.Big);
             ArchiveFlags = Reader.ReadValueS32(Endian.Big);
             Entries = new TEntry[FilesCount];
